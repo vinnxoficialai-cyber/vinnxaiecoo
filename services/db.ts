@@ -184,6 +184,17 @@ export const db = {
     }
   },
 
+  deleteProduct: async (productId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', productId);
+
+    if (error) {
+      console.error('Erro ao deletar produto:', error);
+    }
+  },
+
   // ============ AGGREGATED QUERIES ============
 
   getProductsWithDetails: async (): Promise<ProductWithDetails[]> => {

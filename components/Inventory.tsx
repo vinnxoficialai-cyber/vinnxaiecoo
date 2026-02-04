@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { ProductWithDetails, Supplier, Product } from '../types';
-import { PackageIcon, PlusIcon, SearchIcon, PencilIcon, XIcon, CalculatorIcon, MinusIcon } from './ui/Icons';
+import { PackageIcon, PlusIcon, SearchIcon, PencilIcon, XIcon, CalculatorIcon, MinusIcon, TrashIcon } from './ui/Icons';
 import { ImageUpload } from './ImageUpload';
 
 export const Inventory: React.FC = () => {
@@ -39,6 +39,8 @@ export const Inventory: React.FC = () => {
   // 3. Quick Add Supplier
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
   const [quickSupplierName, setQuickSupplierName] = useState('');
+  const [quickCatalog, setQuickCatalog] = useState<{ model: string, price: number }[]>([]);
+  const [quickTempItem, setQuickTempItem] = useState({ model: '', price: '' });
 
   // Load Data
   const loadData = async () => {
@@ -136,7 +138,16 @@ export const Inventory: React.FC = () => {
     }
 
     setIsFormOpen(false);
+    setIsFormOpen(false);
     loadData();
+  };
+
+  // Delete Product
+  const handleDeleteProduct = async (id: string) => {
+    if (window.confirm('Tem certeza que deseja excluir este produto?')) {
+      await db.deleteProduct(id);
+      loadData();
+    }
   };
 
   // Stock Adjustment Trigger
@@ -383,42 +394,160 @@ export const Inventory: React.FC = () => {
 
                   {/* Quick Add Supplier Form */}
                   {showQuickSupplier && (
-                    <div className="mt-2 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Nome do fornecedor"
-                        value={quickSupplierName}
-                        onChange={(e) => setQuickSupplierName(e.target.value)}
-                        className="w-full p-2 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowQuickSupplier(false);
-                            setQuickSupplierName('');
-                          }}
-                          className="flex-1 py-2 text-xs bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (quickSupplierName.trim()) {
-                              const newSupplier = await db.addSupplier({ name: quickSupplierName.trim() });
-                              if (newSupplier) {
-                                await loadData();
-                                setFormData({ ...formData, supplier_id: newSupplier.id });
-                                setQuickSupplierName('');
-                                setShowQuickSupplier(false);
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-5 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold text-zinc-100">Novo Fornecedor</h4>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowQuickSupplier(false);
+                              setQuickSupplierName('');
+                            }}
+                            className="text-zinc-500 hover:text-zinc-100"
+                          >
+                            <XIcon className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-500 mb-1 block">Nome da Empresa *</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: Fornecedor Premium"
+                              value={quickSupplierName}
+                              onChange={(e) => setQuickSupplierName(e.target.value)}
+                              className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-500 mb-1 block">Nome do Contato</label>
+                            <input
+                              type="text"
+                              id="quick-supplier-contact"
+                              placeholder="Ex: João Silva"
+                              className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-bold text-zinc-500 mb-1 block">Telefone / Zap</label>
+                              <input
+                                type="text"
+                                id="quick-supplier-phone"
+                                placeholder="11999999999"
+                                className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-bold text-zinc-500 mb-1 block">Email</label>
+                              <input
+                                type="email"
+                                id="quick-supplier-email"
+                                placeholder="email@exemplo.com"
+                                className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Catálogo de Modelos */}
+                        <div className="pt-3 border-t border-zinc-800">
+                          <label className="text-xs font-bold text-blue-400 mb-2 block">Catálogo de Modelos</label>
+                          <div className="flex gap-2 mb-2">
+                            <input
+                              type="text"
+                              placeholder="Modelo (Ex: Nike Dunk Low)"
+                              value={quickTempItem.model}
+                              onChange={(e) => setQuickTempItem({ ...quickTempItem, model: e.target.value })}
+                              className="flex-1 p-2 border border-border rounded-lg text-xs bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                            />
+                            <input
+                              type="number"
+                              placeholder="R$"
+                              value={quickTempItem.price}
+                              onChange={(e) => setQuickTempItem({ ...quickTempItem, price: e.target.value })}
+                              className="w-20 p-2 border border-border rounded-lg text-xs bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (quickTempItem.model && quickTempItem.price) {
+                                  setQuickCatalog([...quickCatalog, { model: quickTempItem.model, price: parseFloat(quickTempItem.price) }]);
+                                  setQuickTempItem({ model: '', price: '' });
+                                }
+                              }}
+                              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs"
+                            >
+                              <PlusIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {quickCatalog.length > 0 && (
+                            <div className="space-y-1 max-h-24 overflow-y-auto">
+                              {quickCatalog.map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center bg-zinc-800/50 px-2 py-1 rounded text-xs">
+                                  <span className="text-zinc-300">{item.model}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-emerald-400">R$ {item.price.toFixed(2)}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setQuickCatalog(quickCatalog.filter((_, i) => i !== idx))}
+                                      className="text-red-400 hover:text-red-300"
+                                    >
+                                      <XIcon className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowQuickSupplier(false);
+                              setQuickSupplierName('');
+                              setQuickCatalog([]);
+                              setQuickTempItem({ model: '', price: '' });
+                            }}
+                            className="flex-1 py-2.5 bg-zinc-800 text-zinc-300 rounded-lg font-bold hover:bg-zinc-700"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (quickSupplierName.trim()) {
+                                const contactInput = document.getElementById('quick-supplier-contact') as HTMLInputElement;
+                                const phoneInput = document.getElementById('quick-supplier-phone') as HTMLInputElement;
+                                const emailInput = document.getElementById('quick-supplier-email') as HTMLInputElement;
+
+                                const newSupplier = await db.addSupplier({
+                                  name: quickSupplierName.trim(),
+                                  contact_name: contactInput?.value || undefined,
+                                  phone: phoneInput?.value || undefined,
+                                  email: emailInput?.value || undefined,
+                                  catalog: quickCatalog.length > 0 ? quickCatalog : undefined
+                                });
+
+                                if (newSupplier) {
+                                  await loadData();
+                                  setFormData({ ...formData, supplier_id: newSupplier.id });
+                                  setQuickSupplierName('');
+                                  setQuickCatalog([]);
+                                  setQuickTempItem({ model: '', price: '' });
+                                  setShowQuickSupplier(false);
+                                }
                               }
-                            }
-                          }}
-                          className="flex-1 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 font-bold"
-                        >
-                          Salvar
-                        </button>
+                            }}
+                            className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-500"
+                          >
+                            Salvar Fornecedor
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -547,13 +676,22 @@ export const Inventory: React.FC = () => {
                     <p className="text-xs text-zinc-500 mt-1 truncate max-w-[150px]">{prod.supplier_name}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleOpenForm(prod)}
-                  className="p-2 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
-                  title="Editar Detalhes"
-                >
-                  <PencilIcon className="w-4 h-4" />
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => handleOpenForm(prod)}
+                    className="p-2 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
+                    title="Editar Detalhes"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteProduct(prod.id)}
+                    className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+                    title="Excluir Produto"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Financial Stats Breakdown */}
