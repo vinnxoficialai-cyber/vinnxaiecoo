@@ -31,9 +31,20 @@ export const db = {
 
     if (error) {
       console.error('Erro ao buscar plataformas:', error);
-      return [];
+      // Return empty first to fallback below
     }
-    return data || [];
+
+    // Fallback: If DB is empty, return default platforms so UI buttons appear
+    if (!data || data.length === 0) {
+      return [
+        { id: 'fd057863-7195-4424-b52b-426154564567', name: 'Shopee', standard_fee_percent: 14, color: '#EA501F' },
+        { id: 'fd057863-7195-4424-b52b-426154564568', name: 'TikTok Shop', standard_fee_percent: 10, color: '#FE2C55' },
+        { id: 'fd057863-7195-4424-b52b-426154564569', name: 'Mercado Livre', standard_fee_percent: 16, color: '#FFE600' },
+        { id: 'fd057863-7195-4424-b52b-426154564570', name: 'WhatsApp', standard_fee_percent: 0, color: '#25D366' },
+        { id: 'fd057863-7195-4424-b52b-426154564571', name: 'Instagram', standard_fee_percent: 0, color: '#E1306C' }
+      ];
+    }
+    return data;
   },
 
   getSales: async (): Promise<Sale[]> => {
@@ -84,6 +95,23 @@ export const db = {
     }
 
     // 2. Decrease Stock (Mini-ERP Logic)
+    if (sale.variation_id) {
+      // Decrease VARIATION stock
+      const { data: variation } = await supabase
+        .from('product_variations')
+        .select('stock_quantity')
+        .eq('id', sale.variation_id)
+        .single();
+
+      if (variation) {
+        await supabase
+          .from('product_variations')
+          .update({ stock_quantity: Math.max(0, variation.stock_quantity - 1) })
+          .eq('id', sale.variation_id);
+      }
+    }
+
+    // ALWAYS decrease MAIN PRODUCT stock (as a total cache)
     const { data: product } = await supabase
       .from('products')
       .select('stock_quantity')
@@ -98,6 +126,47 @@ export const db = {
     }
 
     return newSale;
+  },
+
+  // ============ VARIATIONS OPERATIONS ============
+
+  getProductVariations: async (productId: string): Promise<any[]> => {
+    const { data, error } = await supabase
+      .from('product_variations')
+      .select('*')
+      .eq('product_id', productId)
+      .order('created_at');
+
+    if (error) {
+      console.error('Erro ao buscar variações:', error);
+      return [];
+    }
+    return data || [];
+  },
+
+  addVariation: async (variation: { product_id: string, color: string, size: string, stock_quantity: number }) => {
+    const { data, error } = await supabase
+      .from('product_variations')
+      .insert(variation)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao adicionar variação:', error);
+      return null;
+    }
+    return data;
+  },
+
+  deleteVariation: async (id: string) => {
+    const { error } = await supabase
+      .from('product_variations')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Erro ao deletar variação:', error);
+    }
   },
 
   addSupplier: async (supplier: Omit<Supplier, 'id'>): Promise<Supplier | null> => {

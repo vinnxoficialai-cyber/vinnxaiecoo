@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SalesForm from './components/SalesForm';
+import { SalesHistory } from './components/SalesHistory';
 import Dashboard from './components/Dashboard';
 import { Suppliers } from './components/Suppliers';
 import { Inventory } from './components/Inventory';
@@ -214,7 +215,16 @@ const App: React.FC = () => {
 
           <div className="fade-in max-w-5xl mx-auto">
             {currentView === 'dashboard' && <Dashboard sales={sales} />}
-            {currentView === 'sales' && <SalesForm onSaleComplete={handleSaleComplete} />}
+            {currentView === 'sales' && (
+              <div className="flex flex-col xl:flex-row gap-6 items-start justify-center animate-in fade-in slide-in-from-bottom-4">
+                <div className="w-full max-w-lg">
+                  <SalesForm onSaleComplete={handleSaleComplete} />
+                </div>
+                <div className="w-full max-w-lg xl:w-96">
+                  <SalesHistory sales={sales} />
+                </div>
+              </div>
+            )}
             {currentView === 'inventory' && <Inventory />}
             {currentView === 'suppliers' && <Suppliers />}
             {currentView === 'calculator' && <ProfitCalculator />}

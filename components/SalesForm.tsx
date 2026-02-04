@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/db';
-import { Product, Platform } from '../types';
+import { Product, Platform, ProductVariation } from '../types';
 import { AlertTriangleIcon } from './ui/Icons';
 
 interface SalesFormProps {
@@ -15,6 +15,11 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
   // Form State
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [selectedPlatformId, setSelectedPlatformId] = useState<string>('');
+  const [saleDate, setSaleDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Variations State
+  const [variations, setVariations] = useState<ProductVariation[]>([]);
+  const [selectedVariationId, setSelectedVariationId] = useState<string>('');
 
   const [costProduct, setCostProduct] = useState<number>(0);
 
@@ -47,9 +52,25 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const loadVars = async () => {
+      if (selectedProductId) {
+        const vars = await db.getProductVariations(selectedProductId);
+        setVariations(vars);
+        setSelectedVariationId('');
+      } else {
+        setVariations([]);
+        setSelectedVariationId('');
+      }
+    };
+    loadVars();
+  }, [selectedProductId]);
+
   // Update product cost and check stock
   useEffect(() => {
     const prod = products.find(p => p.id === selectedProductId);
+    const selectedVar = variations.find(v => v.id === selectedVariationId);
+
     if (prod) {
       setCostProduct(prod.standard_cost);
 
@@ -58,17 +79,27 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       setCostBag(prod.cost_bag || 0);
       setCostLabel(prod.cost_label || 0);
 
-      if (prod.stock_quantity <= 0) {
-        setStockWarning("Atenção: Produto sem estoque registrado.");
-      } else if (prod.stock_quantity < 2) {
-        setStockWarning("Atenção: Últimas unidades em estoque.");
+      if (selectedVar) {
+        if (selectedVar.stock_quantity <= 0) {
+          setStockWarning(`Variação ${selectedVar.color}/${selectedVar.size} sem estoque.`);
+        } else if (selectedVar.stock_quantity < 2) {
+          setStockWarning(`Variação ${selectedVar.color}/${selectedVar.size} com estoque baixo.`);
+        } else {
+          setStockWarning(null);
+        }
       } else {
-        setStockWarning(null);
+        if (prod.stock_quantity <= 0) {
+          setStockWarning("Atenção: Produto sem estoque registrado.");
+        } else if (prod.stock_quantity < 2) {
+          setStockWarning("Atenção: Últimas unidades em estoque.");
+        } else {
+          setStockWarning(null);
+        }
       }
     } else {
       setStockWarning(null);
     }
-  }, [selectedProductId, products]);
+  }, [selectedProductId, selectedVariationId, variations, products]);
 
   // Calculate profit
   useEffect(() => {
@@ -89,7 +120,11 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
 
     // Validate Stock block
     const prod = products.find(p => p.id === selectedProductId);
-    if (prod && prod.stock_quantity <= 0) {
+    const selectedVar = variations.find(v => v.id === selectedVariationId);
+
+    if (selectedVar && selectedVar.stock_quantity <= 0) {
+      if (!confirm(`Variação ${selectedVar.color} - ${selectedVar.size} sem estoque. Confirmar?`)) return;
+    } else if (prod && prod.stock_quantity <= 0) {
       if (!confirm("Este produto consta como 'Sem Estoque'. Deseja vender mesmo assim (estoque ficará negativo)?")) {
         return;
       }
@@ -107,8 +142,11 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       cost_other: Number(costOther),
       value_gross: Number(valueGross),
       value_received: Number(valueReceived),
-      date_sale: new Date().toISOString(),
-      status: 'Pendente'
+      date_sale: new Date(saleDate + 'T' + new Date().toTimeString().split(' ')[0]).toISOString(),
+      status: 'Pendente',
+      variation_id: selectedVariationId || undefined,
+      color: selectedVar?.color,
+      size: selectedVar?.size
     });
 
     setIsSubmitting(false);
@@ -138,6 +176,9 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
     if (name.includes('mercado')) {
       return 'bg-[#FFE600] text-black border-[#FFE600] shadow-lg shadow-yellow-900/20 font-bold'; // Amarelo ML
     }
+    if (name.includes('whatsapp') || name.includes('whats') || name.includes('zap')) {
+      return 'bg-[#25D366] text-white border-[#25D366] shadow-lg shadow-green-900/20'; // Verde WhatsApp
+    }
 
     // Default fallback
     return 'bg-blue-600 text-white border-blue-600';
@@ -156,6 +197,18 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       <h2 className="text-2xl font-bold text-zinc-100 mb-6">Nova Venda Rápida</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+
+        {/* Date Selection */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-400 mb-1">Data da Venda</label>
+          <input
+            type="date"
+            required
+            className="w-full p-3 border border-border rounded-lg bg-zinc-900 text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none"
+            value={saleDate}
+            onChange={(e) => setSaleDate(e.target.value)}
+          />
+        </div>
 
         {/* Product Selection */}
         <div>
@@ -180,6 +233,27 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
             </div>
           )}
         </div>
+
+        {/* Variations Selection (if available) */}
+        {variations.length > 0 && (
+          <div className="animate-in fade-in slide-in-from-top-2">
+            <label className="block text-sm font-medium text-zinc-400 mb-1">Variação (Cor/Tamanho)</label>
+            <select
+              required
+              className="w-full p-3 border border-border rounded-lg bg-zinc-900 text-zinc-100 focus:ring-2 focus:ring-blue-500"
+              value={selectedVariationId}
+              onChange={(e) => setSelectedVariationId(e.target.value)}
+            >
+              <option value="">Selecione a opção...</option>
+              {variations.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.color} - Tam: {v.size} (Estoque: {v.stock_quantity})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
 
         {/* Platform Selection */}
         <div>

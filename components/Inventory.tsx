@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { ProductWithDetails, Supplier, Product } from '../types';
+import { ProductWithDetails, Supplier, Product, ProductVariation } from '../types';
 import { PackageIcon, PlusIcon, SearchIcon, PencilIcon, XIcon, CalculatorIcon, MinusIcon, TrashIcon } from './ui/Icons';
 import { ImageUpload } from './ImageUpload';
 
@@ -42,6 +42,10 @@ export const Inventory: React.FC = () => {
   const [quickCatalog, setQuickCatalog] = useState<{ model: string, price: number }[]>([]);
   const [quickTempItem, setQuickTempItem] = useState({ model: '', price: '' });
 
+  // 4. Variations State
+  const [variations, setVariations] = useState<Partial<ProductVariation>[]>([]);
+  const [tempVariation, setTempVariation] = useState({ color: '', size: '', qty: '' });
+
   // Load Data
   const loadData = async () => {
     const [productsData, suppliersData] = await Promise.all([
@@ -68,7 +72,8 @@ export const Inventory: React.FC = () => {
   // -- HANDLERS --
 
   // Open Edit/Create Modal
-  const handleOpenForm = (product?: ProductWithDetails) => {
+  // Open Edit/Create Modal
+  const handleOpenForm = async (product?: ProductWithDetails) => {
     if (product) {
       setEditingId(product.id);
       setFormData({
@@ -83,6 +88,9 @@ export const Inventory: React.FC = () => {
         stock_quantity: product.stock_quantity,
         image_url: product.image_url || ''
       });
+      // Load Variations
+      const vars = await db.getProductVariations(product.id);
+      setVariations(vars);
     } else {
       setEditingId(null);
       setFormData({
@@ -97,6 +105,7 @@ export const Inventory: React.FC = () => {
         stock_quantity: 0,
         image_url: ''
       });
+      setVariations([]);
     }
     setIsFormOpen(true);
   };
@@ -123,7 +132,7 @@ export const Inventory: React.FC = () => {
       await db.updateProduct(productToUpdate);
     } else {
       // Create
-      await db.addNewProduct({
+      const newProd = await db.addNewProduct({
         name: formData.name!,
         standard_cost: Number(formData.standard_cost),
         cost_box: Number(formData.cost_box),
@@ -135,12 +144,45 @@ export const Inventory: React.FC = () => {
         supplier_id: formData.supplier_id,
         image_url: formData.image_url
       });
+
+      // Save Variations for New Product
+      if (newProd && variations.length > 0) {
+        for (const v of variations) {
+          if (v.color && v.size) {
+            await db.addVariation({
+              product_id: newProd.id,
+              color: v.color,
+              size: v.size,
+              stock_quantity: v.stock_quantity || 0
+            });
+          }
+        }
+      }
     }
 
     setIsFormOpen(false);
-    setIsFormOpen(false);
     loadData();
   };
+
+  const handleAddVariation = () => {
+    if (!tempVariation.color || !tempVariation.size) return;
+    setVariations([...variations, {
+      color: tempVariation.color,
+      size: tempVariation.size,
+      stock_quantity: Number(tempVariation.qty) || 0
+    }]);
+    setTempVariation({ color: '', size: '', qty: '' });
+  };
+
+  const handleRemoveVariation = async (index: number) => {
+    const v = variations[index];
+    if (v.id) {
+      await db.deleteVariation(v.id);
+    }
+    setVariations(variations.filter((_, i) => i !== index));
+  };
+
+
 
   // Delete Product
   const handleDeleteProduct = async (id: string) => {
@@ -367,6 +409,61 @@ export const Inventory: React.FC = () => {
                     </span>
                   </div>
                 )}
+              </div>
+
+              {/* Product Variations */}
+              <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-3">
+                <h4 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2">
+                  <PackageIcon className="w-4 h-4" /> Variações de Estoque
+                </h4>
+
+                <div className="flex gap-2">
+                  <input
+                    placeholder="Cor (Ex: Preto)"
+                    className="flex-1 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
+                    value={tempVariation.color}
+                    onChange={e => setTempVariation({ ...tempVariation, color: e.target.value })}
+                  />
+                  <input
+                    placeholder="Tamanho (Ex: 40)"
+                    className="w-24 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
+                    value={tempVariation.size}
+                    onChange={e => setTempVariation({ ...tempVariation, size: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Qtd"
+                    className="w-20 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
+                    value={tempVariation.qty}
+                    onChange={e => setTempVariation({ ...tempVariation, qty: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddVariation}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-3 rounded font-bold"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                  {variations.map((v, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800 text-sm">
+                      <span className="text-zinc-300">
+                        <span className="font-bold text-white uppercase">{v.color}</span> - Tam: {v.size}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-blue-400 font-bold">{v.stock_quantity} un</span>
+                        <button type="button" onClick={() => handleRemoveVariation(idx)} className="text-zinc-600 hover:text-red-500">
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {variations.length === 0 && (
+                    <p className="text-center text-xs text-zinc-600 italic">Nenhuma variação. Será usado controle geral.</p>
+                  )}
+                </div>
               </div>
 
               {/* Inventory Block */}
