@@ -114,6 +114,8 @@ export const Inventory: React.FC = () => {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    let productIdToSaveVars = editingId;
+
     if (editingId) {
       // Update
       const productToUpdate: Product = {
@@ -145,17 +147,25 @@ export const Inventory: React.FC = () => {
         image_url: formData.image_url
       });
 
-      // Save Variations for New Product
-      if (newProd && variations.length > 0) {
-        for (const v of variations) {
-          if (v.color && v.size) {
-            await db.addVariation({
-              product_id: newProd.id,
-              color: v.color,
-              size: v.size,
-              stock_quantity: v.stock_quantity || 0
-            });
-          }
+      // Update the ID for variation saving logic below
+      if (newProd) {
+        productIdToSaveVars = newProd.id;
+      }
+    }
+
+    // Save Variations (Common for Create & Update)
+    if (productIdToSaveVars && variations.length > 0) {
+      console.log('Salvando variações para o produto:', productIdToSaveVars);
+      for (const v of variations) {
+        if (!v.id && v.color && v.size) {
+          console.log('Inserindo variação:', v);
+          const res = await db.addVariation({
+            product_id: productIdToSaveVars,
+            color: v.color,
+            size: v.size,
+            stock_quantity: v.stock_quantity || 0
+          });
+          if (!res) console.error('Falha ao salvar variação:', v);
         }
       }
     }
@@ -751,8 +761,13 @@ export const Inventory: React.FC = () => {
       {/* PRODUCT CARDS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {filteredProducts.map(prod => {
-          const isLowStock = prod.stock_quantity <= prod.min_stock_level;
-          const isOutStock = prod.stock_quantity <= 0;
+          const hasVariations = prod.variations && prod.variations.length > 0;
+          const displayedStock = hasVariations
+            ? prod.variations!.reduce((acc, v) => acc + (v.stock_quantity || 0), 0)
+            : prod.stock_quantity;
+
+          const isLowStock = displayedStock <= prod.min_stock_level;
+          const isOutStock = displayedStock <= 0;
 
           const totalExpenses = (prod.cost_box || 0) + (prod.cost_bag || 0) + (prod.cost_label || 0);
           const totalCost = prod.standard_cost + totalExpenses;
@@ -765,15 +780,26 @@ export const Inventory: React.FC = () => {
               {/* Header */}
               <div className="flex justify-between items-start mb-4 relative z-10">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                    <PackageIcon className="w-6 h-6 text-zinc-600" />
+                  <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden">
+                    {prod.image_url ? (
+                      <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <PackageIcon className="w-6 h-6 text-zinc-600" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-bold text-zinc-100 leading-tight">{prod.name}</h3>
-                    <p className="text-xs text-zinc-500 mt-1 truncate max-w-[150px]">{prod.supplier_name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${displayedStock > 0 ? 'bg-zinc-800 text-zinc-300 border border-zinc-700' : 'bg-red-900/30 text-red-400 border border-red-900/50'}`}>
+                        {displayedStock} un
+                      </span>
+                      <p className="text-xs text-zinc-500 truncate max-w-[120px]">{prod.supplier_name}</p>
+                    </div>
+
+
                   </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 h-fit">
                   <button
                     onClick={() => handleOpenForm(prod)}
                     className="p-2 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
@@ -790,6 +816,43 @@ export const Inventory: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* Variations Preview - Split Columns Vertical Flow (Moved Here) */}
+              {prod.variations && prod.variations.length > 0 && (
+                <div className="mb-4 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800">
+                  <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-3 border-b border-zinc-800/50 pb-1">Por Variação</div>
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Column 1 */}
+                    <div className="space-y-2">
+                      {prod.variations.slice(0, Math.ceil(prod.variations.length / 2)).map((v, idx) => (
+                        <div key={`l-${idx}`} className="flex justify-between text-xs items-center border-b border-zinc-800/30 pb-1.5">
+                          <span className="text-zinc-400 flex items-center gap-2 truncate">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700 shrink-0"></span>
+                            {v.size} <span className="text-zinc-700">|</span> {v.color}
+                          </span>
+                          <span className={v.stock_quantity > 0 ? "text-zinc-200 font-bold" : "text-red-500 font-bold"}>
+                            {v.stock_quantity}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Column 2 */}
+                    <div className="space-y-2">
+                      {prod.variations.slice(Math.ceil(prod.variations.length / 2)).map((v, idx) => (
+                        <div key={`r-${idx}`} className="flex justify-between text-xs items-center border-b border-zinc-800/30 pb-1.5">
+                          <span className="text-zinc-400 flex items-center gap-2 truncate">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700 shrink-0"></span>
+                            {v.size} <span className="text-zinc-700">|</span> {v.color}
+                          </span>
+                          <span className={v.stock_quantity > 0 ? "text-zinc-200 font-bold" : "text-red-500 font-bold"}>
+                            {v.stock_quantity}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Financial Stats Breakdown */}
               <div className="bg-zinc-900/30 rounded-lg p-3 mb-4 space-y-2 border border-zinc-800/50">
@@ -823,14 +886,17 @@ export const Inventory: React.FC = () => {
                 <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
                   <span>Estoque Atual</span>
                   <span className={isOutStock ? 'text-red-500 font-bold' : isLowStock ? 'text-amber-500 font-bold' : 'text-zinc-400'}>
-                    {prod.stock_quantity} un
+                    {displayedStock} un
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full ${isOutStock ? 'bg-red-500' : isLowStock ? 'bg-amber-500' : 'bg-blue-500'}`}
-                    style={{ width: `${Math.min((prod.stock_quantity / (prod.min_stock_level * 3)) * 100, 100)}%` }}
-                  ></div>
+                    className={`h-full rounded-full transition-all duration-500 ${isOutStock ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' :
+                      isLowStock ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' :
+                        'bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)]'
+                      }`}
+                    style={{ width: `${Math.min((displayedStock / (prod.min_stock_level || 1)) * 50, 100)}%` }}
+                  />
                 </div>
               </div>
 

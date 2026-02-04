@@ -66,7 +66,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
     loadVars();
   }, [selectedProductId]);
 
-  // Update product cost and check stock
+  // Auto-fill defaults and Price when Product changes
   useEffect(() => {
     const prod = products.find(p => p.id === selectedProductId);
     const selectedVar = variations.find(v => v.id === selectedVariationId);
@@ -78,6 +78,11 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       setCostBox(prod.cost_box || 0);
       setCostBag(prod.cost_bag || 0);
       setCostLabel(prod.cost_label || 0);
+
+      // Auto-fill Sale Price (Gross)
+      if (prod.suggested_price) {
+        setValueGross(prod.suggested_price);
+      }
 
       if (selectedVar) {
         if (selectedVar.stock_quantity <= 0) {
@@ -98,8 +103,26 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       }
     } else {
       setStockWarning(null);
+      setValueGross(0); // Reset if no product
     }
   }, [selectedProductId, selectedVariationId, variations, products]);
+
+  // Calculate Net Received (Value - Platform Fees)
+  useEffect(() => {
+    if (valueGross > 0 && selectedPlatformId) {
+      const platform = platforms.find(p => p.id === selectedPlatformId);
+      if (platform) {
+        const feePercent = platform.standard_fee_percent || 0;
+        const feeAmount = valueGross * (feePercent / 100);
+        const netValue = valueGross - feeAmount;
+        setValueReceived(parseFloat(netValue.toFixed(2)));
+      } else {
+        setValueReceived(valueGross);
+      }
+    } else if (valueGross > 0 && !selectedPlatformId) {
+      setValueReceived(valueGross); // No platform selected yet
+    }
+  }, [valueGross, selectedPlatformId, platforms]);
 
   // Calculate profit
   useEffect(() => {
@@ -132,7 +155,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
 
     setIsSubmitting(true);
 
-    await db.addSale({
+    const { error } = await db.addSale({
       product_id: selectedProductId,
       platform_id: selectedPlatformId,
       cost_product_snapshot: Number(costProduct),
@@ -148,6 +171,12 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       color: selectedVar?.color,
       size: selectedVar?.size
     });
+
+    if (error) {
+      alert(`Erro ao salvar venda: ${error}\n\nDica: Se o erro for sobre "column does not exist", rode o script SQL 'fix_sales_error.sql'.`);
+      setIsSubmitting(false);
+      return;
+    }
 
     setIsSubmitting(false);
     setValueGross(0);

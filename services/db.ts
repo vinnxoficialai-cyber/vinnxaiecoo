@@ -1,4 +1,4 @@
-import { Product, Platform, Sale, SaleWithDetails, Supplier, ProductWithDetails } from '../types';
+import { Product, Platform, Sale, SaleWithDetails, Supplier, ProductWithDetails, ProductVariation } from '../types';
 import { supabase } from './supabaseClient';
 
 // Helper para pegar o user_id atual
@@ -34,14 +34,35 @@ export const db = {
       // Return empty first to fallback below
     }
 
-    // Fallback: If DB is empty, return default platforms so UI buttons appear
+    // Fallback: If DB is empty, AUTO-SEED default platforms for this user
     if (!data || data.length === 0) {
+      const userId = await getCurrentUserId();
+      if (userId) {
+        console.log('Sem plataformas encontradas. Criando padrões...');
+        const defaultPlatforms = [
+          { name: 'Shopee', standard_fee_percent: 14, color: '#EA501F', user_id: userId },
+          { name: 'TikTok Shop', standard_fee_percent: 10, color: '#FE2C55', user_id: userId },
+          { name: 'Mercado Livre', standard_fee_percent: 16, color: '#FFE600', user_id: userId },
+          { name: 'WhatsApp', standard_fee_percent: 0, color: '#25D366', user_id: userId },
+          { name: 'Instagram', standard_fee_percent: 0, color: '#E1306C', user_id: userId },
+          { name: 'Site Próprio', standard_fee_percent: 0, color: '#2563EB', user_id: userId }
+        ];
+
+        const { data: newPlatforms, error: seedError } = await supabase
+          .from('platforms')
+          .insert(defaultPlatforms)
+          .select();
+
+        if (!seedError && newPlatforms) {
+          return newPlatforms;
+        }
+        console.error('Erro ao criar plataformas padrão:', seedError);
+      }
+
+      // Ultimate fallback (Visual only - will likely cause FK error if used)
       return [
-        { id: 'fd057863-7195-4424-b52b-426154564567', name: 'Shopee', standard_fee_percent: 14, color: '#EA501F' },
-        { id: 'fd057863-7195-4424-b52b-426154564568', name: 'TikTok Shop', standard_fee_percent: 10, color: '#FE2C55' },
-        { id: 'fd057863-7195-4424-b52b-426154564569', name: 'Mercado Livre', standard_fee_percent: 16, color: '#FFE600' },
-        { id: 'fd057863-7195-4424-b52b-426154564570', name: 'WhatsApp', standard_fee_percent: 0, color: '#25D366' },
-        { id: 'fd057863-7195-4424-b52b-426154564571', name: 'Instagram', standard_fee_percent: 0, color: '#E1306C' }
+        { id: 'temp-1', name: 'Shopee (Erro BD)', standard_fee_percent: 14, color: '#EA501F' },
+        { id: 'temp-2', name: 'TikTok (Erro BD)', standard_fee_percent: 10, color: '#FE2C55' }
       ];
     }
     return data;
@@ -75,11 +96,11 @@ export const db = {
 
   // ============ ADD OPERATIONS ============
 
-  addSale: async (sale: Omit<Sale, 'id' | 'profit_final'>): Promise<Sale | null> => {
+  addSale: async (sale: Omit<Sale, 'id' | 'profit_final'>): Promise<{ data: Sale | null; error: string | null }> => {
     const userId = await getCurrentUserId();
     if (!userId) {
       console.error('Usuário não autenticado');
-      return null;
+      return { data: null, error: 'Usuário não autenticado' };
     }
 
     // 1. Insert Sale with user_id
@@ -91,7 +112,7 @@ export const db = {
 
     if (saleError) {
       console.error('Erro ao adicionar venda:', saleError);
-      return null;
+      return { data: null, error: saleError.message || JSON.stringify(saleError) };
     }
 
     // 2. Decrease Stock (Mini-ERP Logic)
@@ -125,49 +146,10 @@ export const db = {
         .eq('id', sale.product_id);
     }
 
-    return newSale;
+    return { data: newSale, error: null };
   },
 
-  // ============ VARIATIONS OPERATIONS ============
 
-  getProductVariations: async (productId: string): Promise<any[]> => {
-    const { data, error } = await supabase
-      .from('product_variations')
-      .select('*')
-      .eq('product_id', productId)
-      .order('created_at');
-
-    if (error) {
-      console.error('Erro ao buscar variações:', error);
-      return [];
-    }
-    return data || [];
-  },
-
-  addVariation: async (variation: { product_id: string, color: string, size: string, stock_quantity: number }) => {
-    const { data, error } = await supabase
-      .from('product_variations')
-      .insert(variation)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Erro ao adicionar variação:', error);
-      return null;
-    }
-    return data;
-  },
-
-  deleteVariation: async (id: string) => {
-    const { error } = await supabase
-      .from('product_variations')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Erro ao deletar variação:', error);
-    }
-  },
 
   addSupplier: async (supplier: Omit<Supplier, 'id'>): Promise<Supplier | null> => {
     const userId = await getCurrentUserId();
@@ -286,6 +268,46 @@ export const db = {
     }
   },
 
+  // ============ VARIATIONS ============
+
+  getProductVariations: async (productId: string): Promise<ProductVariation[]> => {
+    const { data, error } = await supabase
+      .from('product_variations')
+      .select('*')
+      .eq('product_id', productId);
+
+    if (error) {
+      console.error('Erro ao buscar variações:', error);
+      return [];
+    }
+    return data || [];
+  },
+
+  addVariation: async (variation: Omit<ProductVariation, 'id' | 'created_at'>): Promise<ProductVariation | null> => {
+    const { data, error } = await supabase
+      .from('product_variations')
+      .insert(variation)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao adicionar variação:', error);
+      return null;
+    }
+    return data;
+  },
+
+  deleteVariation: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from('product_variations')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Erro ao deletar variação:', error);
+    }
+  },
+
   // ============ AGGREGATED QUERIES ============
 
   getProductsWithDetails: async (): Promise<ProductWithDetails[]> => {
@@ -293,7 +315,8 @@ export const db = {
       .from('products')
       .select(`
         *,
-        suppliers (name)
+        suppliers (name),
+        product_variations (*)
       `)
       .order('name');
 
@@ -304,7 +327,8 @@ export const db = {
 
     return (data || []).map((p: any) => ({
       ...p,
-      supplier_name: p.suppliers?.name || 'Fornecedor N/A'
+      supplier_name: p.suppliers?.name || 'Fornecedor N/A',
+      variations: p.product_variations || [] // Join returns array
     }));
   },
 
