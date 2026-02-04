@@ -113,8 +113,10 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
       const platform = platforms.find(p => p.id === selectedPlatformId);
       if (platform) {
         const feePercent = platform.standard_fee_percent || 0;
+        const feeFixed = platform.standard_fixed_fee || 0;
+
         const feeAmount = valueGross * (feePercent / 100);
-        const netValue = valueGross - feeAmount;
+        const netValue = valueGross - feeAmount - feeFixed;
         setValueReceived(parseFloat(netValue.toFixed(2)));
       } else {
         setValueReceived(valueGross);
@@ -413,10 +415,30 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSaleComplete }) => {
           </div>
         </div>
 
+        {/* Feedback de Plataforma Selecionada */}
+        {selectedPlatformId && (
+          <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800 flex items-center justify-between">
+            <span className="text-sm text-zinc-400">Plataforma selecionada:</span>
+            <span className="font-bold text-zinc-100 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: platforms.find(p => p.id === selectedPlatformId)?.color }}></div>
+              {platforms.find(p => p.id === selectedPlatformId)?.name}
+            </span>
+          </div>
+        )}
+
+        {/* Mensagem de Validação se Botão estiver Bloqueado */}
+        {(!selectedProductId || !selectedPlatformId || !valueReceived) && (
+          <p className="text-center text-xs text-amber-500 font-medium">
+            {!selectedProductId ? 'Selecione um produto' :
+              !selectedPlatformId ? 'Selecione uma plataforma' :
+                'Preencha o valor da venda'} para confirmar.
+          </p>
+        )}
+
         <button
           type="submit"
           disabled={!selectedProductId || !selectedPlatformId || !valueReceived || isSubmitting}
-          className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed mt-4 transition-all active:scale-[0.98]"
+          className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed mt-2 transition-all active:scale-[0.98]"
         >
           {isSubmitting ? 'Salvando...' : 'Confirmar Venda e Baixar Estoque'}
         </button>

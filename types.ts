@@ -48,6 +48,7 @@ export interface Platform {
   id: string;
   name: string;
   standard_fee_percent?: number;
+  standard_fixed_fee?: number;
   color: string;
 }
 

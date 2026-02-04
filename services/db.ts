@@ -44,26 +44,24 @@ export const db = {
           { name: 'TikTok Shop', standard_fee_percent: 10, color: '#FE2C55', user_id: userId },
           { name: 'Mercado Livre', standard_fee_percent: 16, color: '#FFE600', user_id: userId },
           { name: 'WhatsApp', standard_fee_percent: 0, color: '#25D366', user_id: userId },
-          { name: 'Instagram', standard_fee_percent: 0, color: '#E1306C', user_id: userId },
-          { name: 'Site Próprio', standard_fee_percent: 0, color: '#2563EB', user_id: userId }
+          { name: 'Instagram', standard_fee_percent: 0, color: '#E1306C', user_id: userId }
         ];
 
-        const { data: newPlatforms, error: seedError } = await supabase
+        const { data: newPlatforms, error: insertError } = await supabase
           .from('platforms')
-          .insert(defaultPlatforms)
+          .upsert(defaultPlatforms, { onConflict: 'name, user_id' })
           .select();
 
-        if (!seedError && newPlatforms) {
+        if (insertError) {
+          console.error("Erro ao criar plataformas automáticas:", insertError);
+        }
+
+        if (newPlatforms) {
           return newPlatforms;
         }
-        console.error('Erro ao criar plataformas padrão:', seedError);
       }
-
-      // Ultimate fallback (Visual only - will likely cause FK error if used)
-      return [
-        { id: 'temp-1', name: 'Shopee (Erro BD)', standard_fee_percent: 14, color: '#EA501F' },
-        { id: 'temp-2', name: 'TikTok (Erro BD)', standard_fee_percent: 10, color: '#FE2C55' }
-      ];
+      // If auth fails or insert fails, return empty to avoid Fake ID errors
+      return [];
     }
     return data;
   },
@@ -103,10 +101,19 @@ export const db = {
       return { data: null, error: 'Usuário não autenticado' };
     }
 
-    // 1. Insert Sale with user_id
+    // Calculate Profit Final manually since it's not generated
+    const totalCost = Number(sale.cost_product_snapshot || 0) +
+      Number(sale.cost_box || 0) +
+      Number(sale.cost_bag || 0) +
+      Number(sale.cost_label || 0) +
+      Number(sale.cost_other || 0);
+
+    const profitFinal = Number(sale.value_received || 0) - totalCost;
+
+    // 1. Insert Sale with user_id & profit_final
     const { data: newSale, error: saleError } = await supabase
       .from('sales')
-      .insert({ ...sale, user_id: userId })
+      .insert({ ...sale, user_id: userId, profit_final: profitFinal })
       .select()
       .single();
 
@@ -147,6 +154,61 @@ export const db = {
     }
 
     return { data: newSale, error: null };
+  },
+
+  deleteSale: async (saleId: string): Promise<{ success: boolean; error: string | null }> => {
+    // 1. Get Sale Details to Restore Stock
+    const { data: sale, error: fetchError } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('id', saleId)
+      .single();
+
+    if (fetchError || !sale) {
+      return { success: false, error: 'Venda não encontrada.' };
+    }
+
+    // 2. Restore Stock (Variation)
+    if (sale.variation_id) {
+      const { data: variation } = await supabase
+        .from('product_variations')
+        .select('stock_quantity')
+        .eq('id', sale.variation_id)
+        .single();
+
+      if (variation) {
+        await supabase
+          .from('product_variations')
+          .update({ stock_quantity: variation.stock_quantity + 1 })
+          .eq('id', sale.variation_id);
+      }
+    }
+
+    // 3. Restore Stock (Product)
+    const { data: product } = await supabase
+      .from('products')
+      .select('stock_quantity')
+      .eq('id', sale.product_id)
+      .single();
+
+    if (product) {
+      await supabase
+        .from('products')
+        .update({ stock_quantity: product.stock_quantity + 1 })
+        .eq('id', sale.product_id);
+    }
+
+    // 4. Delete Sale
+    const { error: deleteError } = await supabase
+      .from('sales')
+      .delete()
+      .eq('id', saleId);
+
+    if (deleteError) {
+      return { success: false, error: deleteError.message };
+    }
+
+    return { success: true, error: null };
   },
 
 

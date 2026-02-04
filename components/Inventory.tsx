@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { ProductWithDetails, Supplier, Product, ProductVariation } from '../types';
-import { PackageIcon, PlusIcon, SearchIcon, PencilIcon, XIcon, CalculatorIcon, MinusIcon, TrashIcon } from './ui/Icons';
+import { ProductWithDetails, Supplier, Product, ProductVariation, Platform } from '../types';
+import { PackageIcon, PlusIcon, SearchIcon, PencilIcon, XIcon, CalculatorIcon, MinusIcon, TrashIcon, DollarSignIcon, ChevronRightIcon, AlertTriangleIcon } from './ui/Icons';
 import { ImageUpload } from './ImageUpload';
 
 export const Inventory: React.FC = () => {
   const [products, setProducts] = useState<ProductWithDetails[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // -- MODAL STATES --
@@ -20,8 +21,9 @@ export const Inventory: React.FC = () => {
   const [entrySupplierId, setEntrySupplierId] = useState<string>('');
   const [entryCost, setEntryCost] = useState<number>(0);
 
-  // 2. Product Form Modal (Create / Edit)
+  // 2. Product Form Modal (Create / Edit) - WIZARD
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
@@ -46,14 +48,19 @@ export const Inventory: React.FC = () => {
   const [variations, setVariations] = useState<Partial<ProductVariation>[]>([]);
   const [tempVariation, setTempVariation] = useState({ color: '', size: '', qty: '' });
 
+  // 5. Simulation Overrides (Fee % and Fixed Fee)
+  const [simulationOverrides, setSimulationOverrides] = useState<Record<string, { fee: number, fixed: number }>>({});
+
   // Load Data
   const loadData = async () => {
-    const [productsData, suppliersData] = await Promise.all([
+    const [productsData, suppliersData, platformsData] = await Promise.all([
       db.getProductsWithDetails(),
-      db.getSuppliers()
+      db.getSuppliers(),
+      db.getPlatforms()
     ]);
     setProducts(productsData);
     setSuppliers(suppliersData);
+    setPlatforms(platformsData);
   };
 
   useEffect(() => {
@@ -72,8 +79,9 @@ export const Inventory: React.FC = () => {
   // -- HANDLERS --
 
   // Open Edit/Create Modal
-  // Open Edit/Create Modal
   const handleOpenForm = async (product?: ProductWithDetails) => {
+    setCurrentStep(1); // Reset to step 1
+    setSimulationOverrides({}); // Reset simulation overrides
     if (product) {
       setEditingId(product.id);
       setFormData({
@@ -111,8 +119,8 @@ export const Inventory: React.FC = () => {
   };
 
   // Save Product (Create/Update)
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveProduct = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     let productIdToSaveVars = editingId;
 
@@ -192,8 +200,6 @@ export const Inventory: React.FC = () => {
     setVariations(variations.filter((_, i) => i !== index));
   };
 
-
-
   // Delete Product
   const handleDeleteProduct = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir este produto?')) {
@@ -223,7 +229,6 @@ export const Inventory: React.FC = () => {
     if (stockModalProduct) {
       const supplier = suppliers.find(s => s.id === supId);
       // Try to find matching item in catalog to pull price
-      // Simple fuzzy match: checks if product name contains catalog model or vice versa
       const catalogItem = supplier?.catalog?.find(item =>
         stockModalProduct.name.toLowerCase().includes(item.model.toLowerCase()) ||
         item.model.toLowerCase().includes(stockModalProduct.name.toLowerCase())
@@ -307,387 +312,405 @@ export const Inventory: React.FC = () => {
         </div>
       </div>
 
-      {/* PRODUCT MODAL (Create/Edit) */}
+      {/* --- WIZARD PRODUCT FORM --- */}
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in zoom-in-95 duration-200">
           <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-border flex justify-between items-center bg-zinc-900/50">
               <h3 className="font-bold text-lg text-zinc-100">
-                {editingId ? 'Editar Produto & Custos' : 'Novo Produto'}
+                {editingId ? 'Editar Produto' : 'Novo Produto'}
               </h3>
               <button onClick={() => setIsFormOpen(false)} className="text-zinc-500 hover:text-zinc-100">
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="p-6 space-y-5 overflow-y-auto">
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1">Nome do Modelo</label>
-                <input
-                  required
-                  placeholder="Ex: Nike Air Force 1"
-                  className="w-full p-3 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
+            <div className="p-6 space-y-5 overflow-y-auto">
 
-              {/* Image Upload */}
-              <ImageUpload
-                currentImageUrl={formData.image_url}
-                productId={editingId || 'new'}
-                onImageUploaded={(url) => setFormData({ ...formData, image_url: url })}
-              />
-
-              {/* Financial Block */}
-              <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-4">
-                <h4 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2">
-                  <CalculatorIcon className="w-3 h-3" /> Precificação
-                </h4>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">Custo Tênis (Fornecedor)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-zinc-500 text-sm">R$</span>
-                    <input
-                      required
-                      type="number"
-                      step="0.01"
-                      className="w-full pl-8 p-2 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      value={formData.standard_cost || ''}
-                      onChange={e => setFormData({ ...formData, standard_cost: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-500 mb-1">Caixinha</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="w-full p-2 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      value={formData.cost_box || ''}
-                      onChange={e => setFormData({ ...formData, cost_box: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-500 mb-1">Saquinho</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="w-full p-2 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      value={formData.cost_bag || ''}
-                      onChange={e => setFormData({ ...formData, cost_bag: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-500 mb-1">Etiqueta</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="w-full p-2 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      value={formData.cost_label || ''}
-                      onChange={e => setFormData({ ...formData, cost_label: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">Preço de Venda (Sugerido)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-zinc-500 text-sm">R$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-full pl-8 p-2 border border-blue-500/30 rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      value={formData.suggested_price || ''}
-                      onChange={e => setFormData({ ...formData, suggested_price: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                </div>
-
-                {/* Live Preview of Profit */}
-                {Number(formData.suggested_price) > 0 && (
-                  <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
-                    <span className="text-xs text-zinc-500">Lucro Bruto Estimado:</span>
-                    <span className="font-bold text-emerald-500">
-                      R$ {(Number(formData.suggested_price) - (Number(formData.standard_cost) + getTotalExpenses(formData))).toFixed(2)}
+              {/* STEPS INDICATOR */}
+              <div className="flex items-center justify-between mb-6 px-2">
+                {[1, 2, 3].map((step) => (
+                  <div key={step} className={`flex items-center gap-2 ${currentStep >= step ? 'text-blue-500' : 'text-zinc-600'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 
+                      ${currentStep >= step ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-800'}`}>
+                      {step}
+                    </div>
+                    <span className="text-xs font-bold uppercase hidden sm:block">
+                      {step === 1 && 'Básico'}
+                      {step === 2 && 'Custos'}
+                      {step === 3 && 'Simulação'}
                     </span>
+                    {step < 3 && <div className={`h-1 w-8 rounded mx-2 ${currentStep > step ? 'bg-blue-500' : 'bg-zinc-800'}`} />}
                   </div>
-                )}
+                ))}
               </div>
 
-              {/* Product Variations */}
-              <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-3">
-                <h4 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2">
-                  <PackageIcon className="w-4 h-4" /> Variações de Estoque
-                </h4>
+              {/* STEP 1: BASIC INFO */}
+              {currentStep === 1 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Image Upload */}
+                    <ImageUpload
+                      currentImageUrl={formData.image_url}
+                      productId={editingId || 'new'}
+                      onImageUploaded={(url) => setFormData({ ...formData, image_url: url })}
+                    />
 
-                <div className="flex gap-2">
-                  <input
-                    placeholder="Cor (Ex: Preto)"
-                    className="flex-1 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
-                    value={tempVariation.color}
-                    onChange={e => setTempVariation({ ...tempVariation, color: e.target.value })}
-                  />
-                  <input
-                    placeholder="Tamanho (Ex: 40)"
-                    className="w-24 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
-                    value={tempVariation.size}
-                    onChange={e => setTempVariation({ ...tempVariation, size: e.target.value })}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Qtd"
-                    className="w-20 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white"
-                    value={tempVariation.qty}
-                    onChange={e => setTempVariation({ ...tempVariation, qty: e.target.value })}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddVariation}
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-3 rounded font-bold"
-                  >
-                    +
-                  </button>
-                </div>
-
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                  {variations.map((v, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800 text-sm">
-                      <span className="text-zinc-300">
-                        <span className="font-bold text-white uppercase">{v.color}</span> - Tam: {v.size}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-blue-400 font-bold">{v.stock_quantity} un</span>
-                        <button type="button" onClick={() => handleRemoveVariation(idx)} className="text-zinc-600 hover:text-red-500">
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">Nome do Produto *</label>
+                        <input
+                          type="text"
+                          required
+                          className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                          value={formData.name}
+                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        />
                       </div>
-                    </div>
-                  ))}
-                  {variations.length === 0 && (
-                    <p className="text-center text-xs text-zinc-600 italic">Nenhuma variação. Será usado controle geral.</p>
-                  )}
-                </div>
-              </div>
 
-              {/* Inventory Block */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">Fornecedor</label>
-                  <div className="flex gap-2">
-                    <select
-                      className="flex-1 p-3 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                      value={formData.supplier_id}
-                      onChange={e => setFormData({ ...formData, supplier_id: e.target.value })}
-                    >
-                      <option value="">Selecione...</option>
-                      {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickSupplier(!showQuickSupplier)}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-                      title="Adicionar fornecedor"
-                    >
-                      <PlusIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Quick Add Supplier Form */}
-                  {showQuickSupplier && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-5 space-y-4">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-bold text-zinc-100">Novo Fornecedor</h4>
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">Fornecedor</label>
+                        <div className="flex gap-2">
+                          <select
+                            className="flex-1 p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                            value={formData.supplier_id}
+                            onChange={e => setFormData({ ...formData, supplier_id: e.target.value })}
+                          >
+                            <option value="">Selecione...</option>
+                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
                           <button
                             type="button"
-                            onClick={() => {
-                              setShowQuickSupplier(false);
-                              setQuickSupplierName('');
-                            }}
-                            className="text-zinc-500 hover:text-zinc-100"
+                            onClick={() => setShowQuickSupplier(!showQuickSupplier)}
+                            className="px-3 bg-zinc-800 hover:bg-blue-600 text-white rounded-lg transition-colors border border-zinc-700 font-bold"
+                            title="Novo Fornecedor"
                           >
-                            <XIcon className="w-5 h-5" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div>
-                            <label className="text-xs font-bold text-zinc-500 mb-1 block">Nome da Empresa *</label>
-                            <input
-                              type="text"
-                              placeholder="Ex: Fornecedor Premium"
-                              value={quickSupplierName}
-                              onChange={(e) => setQuickSupplierName(e.target.value)}
-                              className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-zinc-500 mb-1 block">Nome do Contato</label>
-                            <input
-                              type="text"
-                              id="quick-supplier-contact"
-                              placeholder="Ex: João Silva"
-                              className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-xs font-bold text-zinc-500 mb-1 block">Telefone / Zap</label>
-                              <input
-                                type="text"
-                                id="quick-supplier-phone"
-                                placeholder="11999999999"
-                                className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs font-bold text-zinc-500 mb-1 block">Email</label>
-                              <input
-                                type="email"
-                                id="quick-supplier-email"
-                                placeholder="email@exemplo.com"
-                                className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Catálogo de Modelos */}
-                        <div className="pt-3 border-t border-zinc-800">
-                          <label className="text-xs font-bold text-blue-400 mb-2 block">Catálogo de Modelos</label>
-                          <div className="flex gap-2 mb-2">
-                            <input
-                              type="text"
-                              placeholder="Modelo (Ex: Nike Dunk Low)"
-                              value={quickTempItem.model}
-                              onChange={(e) => setQuickTempItem({ ...quickTempItem, model: e.target.value })}
-                              className="flex-1 p-2 border border-border rounded-lg text-xs bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                            />
-                            <input
-                              type="number"
-                              placeholder="R$"
-                              value={quickTempItem.price}
-                              onChange={(e) => setQuickTempItem({ ...quickTempItem, price: e.target.value })}
-                              className="w-20 p-2 border border-border rounded-lg text-xs bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (quickTempItem.model && quickTempItem.price) {
-                                  setQuickCatalog([...quickCatalog, { model: quickTempItem.model, price: parseFloat(quickTempItem.price) }]);
-                                  setQuickTempItem({ model: '', price: '' });
-                                }
-                              }}
-                              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs"
-                            >
-                              <PlusIcon className="w-4 h-4" />
-                            </button>
-                          </div>
-                          {quickCatalog.length > 0 && (
-                            <div className="space-y-1 max-h-24 overflow-y-auto">
-                              {quickCatalog.map((item, idx) => (
-                                <div key={idx} className="flex justify-between items-center bg-zinc-800/50 px-2 py-1 rounded text-xs">
-                                  <span className="text-zinc-300">{item.model}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-emerald-400">R$ {item.price.toFixed(2)}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setQuickCatalog(quickCatalog.filter((_, i) => i !== idx))}
-                                      className="text-red-400 hover:text-red-300"
-                                    >
-                                      <XIcon className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex gap-3 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowQuickSupplier(false);
-                              setQuickSupplierName('');
-                              setQuickCatalog([]);
-                              setQuickTempItem({ model: '', price: '' });
-                            }}
-                            className="flex-1 py-2.5 bg-zinc-800 text-zinc-300 rounded-lg font-bold hover:bg-zinc-700"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (quickSupplierName.trim()) {
-                                const contactInput = document.getElementById('quick-supplier-contact') as HTMLInputElement;
-                                const phoneInput = document.getElementById('quick-supplier-phone') as HTMLInputElement;
-                                const emailInput = document.getElementById('quick-supplier-email') as HTMLInputElement;
-
-                                const newSupplier = await db.addSupplier({
-                                  name: quickSupplierName.trim(),
-                                  contact_name: contactInput?.value || undefined,
-                                  phone: phoneInput?.value || undefined,
-                                  email: emailInput?.value || undefined,
-                                  catalog: quickCatalog.length > 0 ? quickCatalog : undefined
-                                });
-
-                                if (newSupplier) {
-                                  await loadData();
-                                  setFormData({ ...formData, supplier_id: newSupplier.id });
-                                  setQuickSupplierName('');
-                                  setQuickCatalog([]);
-                                  setQuickTempItem({ model: '', price: '' });
-                                  setShowQuickSupplier(false);
-                                }
-                              }
-                            }}
-                            className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-500"
-                          >
-                            Salvar Fornecedor
+                            +
                           </button>
                         </div>
                       </div>
                     </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">Estoque Mínimo</label>
-                  <input
-                    required
-                    type="number"
-                    className="w-full p-3 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                    value={formData.min_stock_level}
-                    onChange={e => setFormData({ ...formData, min_stock_level: parseInt(e.target.value) })}
-                  />
-                </div>
-              </div>
+                  </div>
 
-              {!editingId && (
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1">Estoque Inicial</label>
-                  <input
-                    type="number"
-                    className="w-full p-3 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                    value={formData.stock_quantity}
-                    onChange={e => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) })}
-                  />
+                  {/* Variations Section */}
+                  <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-3">
+                    <h4 className="text-xs font-bold text-blue-400 uppercase flex items-center gap-2">
+                      <PackageIcon className="w-4 h-4" /> Variações de Estoque
+                    </h4>
+
+                    <div className="flex gap-2">
+                      <input
+                        placeholder="Cor (Ex: Preto)"
+                        className="flex-1 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-blue-500 outline-none"
+                        value={tempVariation.color}
+                        onChange={e => setTempVariation({ ...tempVariation, color: e.target.value })}
+                      />
+                      <input
+                        placeholder="Tam (40)"
+                        className="w-20 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-blue-500 outline-none"
+                        value={tempVariation.size}
+                        onChange={e => setTempVariation({ ...tempVariation, size: e.target.value })}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Qtd"
+                        className="w-20 p-2 bg-zinc-900 border border-zinc-700 rounded text-sm text-white focus:border-blue-500 outline-none"
+                        value={tempVariation.qty}
+                        onChange={e => setTempVariation({ ...tempVariation, qty: e.target.value })}
+                      />
+                      <button type="button" onClick={handleAddVariation} className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded font-bold transition-colors">+</button>
+                    </div>
+
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {variations.map((v, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800 text-sm">
+                          <span className="text-zinc-300">
+                            <span className="font-bold text-white uppercase">{v.color}</span> - Tam: {v.size}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-blue-400 font-bold">{v.stock_quantity} un</span>
+                            <button type="button" onClick={() => handleRemoveVariation(idx)} className="text-zinc-600 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                      ))}
+                      {variations.length === 0 && (
+                        <div className="flex items-center gap-2 p-3 bg-yellow-900/20 text-yellow-500 rounded text-xs border border-yellow-900/30">
+                          <AlertTriangleIcon className="w-4 h-4 shrink-0" />
+                          <span>Adicione pelo menos uma variação (cor/tamanho).</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* General Stock Fallback (Hidden if variations exist, or visible as Total) */}
+                  {!variations.length && (
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">Estoque Total</label>
+                      <input
+                        type="number"
+                        className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                        value={formData.stock_quantity}
+                        onChange={e => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) })}
+                      />
+                    </div>
+                  )}
+
+                  {/* Stock Min Level */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 mb-1">Estoque Mínimo (Alerta)</label>
+                    <input
+                      type="number"
+                      className="w-full p-2.5 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                      value={formData.min_stock_level}
+                      onChange={e => setFormData({ ...formData, min_stock_level: parseInt(e.target.value) })}
+                    />
+                  </div>
                 </div>
               )}
 
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsFormOpen(false)} className="flex-1 py-3 bg-zinc-800 text-zinc-300 rounded-lg font-bold hover:bg-zinc-700">Cancelar</button>
-                <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-500">{editingId ? 'Salvar' : 'Criar'}</button>
+              {/* STEP 2: COSTS */}
+              {currentStep === 2 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="bg-zinc-900/50 p-5 rounded-xl border border-zinc-800">
+                    <h4 className="text-sm font-bold text-zinc-100 mb-4 flex items-center gap-2">
+                      <DollarSignIcon className="w-5 h-5 text-emerald-500" /> Custo Base
+                    </h4>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 mb-1">Custo do Produto (Fábrica)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-zinc-500 text-sm">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="w-full pl-8 p-2.5 border border-border rounded-lg text-lg font-bold bg-zinc-900 text-emerald-400 focus:border-emerald-500 outline-none"
+                          value={formData.standard_cost || ''}
+                          onChange={e => setFormData({ ...formData, standard_cost: parseFloat(e.target.value) })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-zinc-900/50 p-5 rounded-xl border border-zinc-800">
+                    <h4 className="text-sm font-bold text-zinc-100 mb-4">Despesas Extras (Embalagem/Logística)</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">Caixinha</label>
+                        <input type="number" step="0.01" className="w-full p-2 border border-zinc-700 rounded bg-zinc-900 text-white text-sm"
+                          value={formData.cost_box || ''} onChange={e => setFormData({ ...formData, cost_box: parseFloat(e.target.value) })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">Saquinho</label>
+                        <input type="number" step="0.01" className="w-full p-2 border border-zinc-700 rounded bg-zinc-900 text-white text-sm"
+                          value={formData.cost_bag || ''} onChange={e => setFormData({ ...formData, cost_bag: parseFloat(e.target.value) })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-500 mb-1">Etiqueta/Fita</label>
+                        <input type="number" step="0.01" className="w-full p-2 border border-zinc-700 rounded bg-zinc-900 text-white text-sm"
+                          value={formData.cost_label || ''} onChange={e => setFormData({ ...formData, cost_label: parseFloat(e.target.value) })} />
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center">
+                      <span className="text-xs text-zinc-400">Total de Custos:</span>
+                      <span className="text-lg font-bold text-red-400">R$ {(Number(formData.standard_cost || 0) + getTotalExpenses(formData)).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: PRICING & SIMULATION */}
+              {currentStep === 3 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
+                    <label className="block text-sm font-bold text-blue-400 mb-2">Preço de Venda Sugerido</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-3 text-zinc-500">R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="w-full pl-8 p-3 border border-blue-500/50 rounded-lg text-xl font-bold bg-zinc-900 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={formData.suggested_price || ''}
+                        onChange={e => setFormData({ ...formData, suggested_price: parseFloat(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* SIMULATION TABLE */}
+                  {Number(formData.suggested_price) > 0 && (
+                    <div className="bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden">
+                      <div className="bg-zinc-900/80 p-3 border-b border-zinc-800 flex justify-between items-center">
+                        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Simulação por Plataforma</h4>
+                        <span className="text-[10px] text-zinc-500">Custos totais descontados: R$ {(Number(formData.standard_cost || 0) + getTotalExpenses(formData)).toFixed(2)}</span>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                        <table className="w-full text-sm text-left">
+                          <thead className="text-xs text-zinc-500 bg-zinc-900 sticky top-0">
+                            <tr>
+                              <th className="px-4 py-2">Plataforma</th>
+                              <th className="px-2 py-2 text-center w-20">Taxa %</th>
+                              <th className="px-2 py-2 text-center w-24">Taxa Fixa</th>
+                              <th className="px-4 py-2 text-right">Líquido</th>
+                              <th className="px-4 py-2 text-right">Lucro</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800">
+                            {platforms.map(p => {
+                              // Use override if exists, otherwise default
+                              const override = simulationOverrides[p.id] || {};
+                              const feePercent = override.fee !== undefined ? override.fee : (p.standard_fee_percent || 0);
+                              const feeFixed = override.fixed !== undefined ? override.fixed : (p.standard_fixed_fee || 0);
+
+                              const price = Number(formData.suggested_price || 0);
+                              const totalCost = Number(formData.standard_cost || 0) + getTotalExpenses(formData);
+
+                              // Calculation Logic: Price - (Price * %) - Fixed
+                              const taxValue = (price * feePercent) / 100;
+                              const liquid = price - taxValue - feeFixed;
+                              const profit = liquid - totalCost;
+                              const margin = (profit / price) * 100;
+
+                              return (
+                                <tr key={p.id} className="hover:bg-zinc-900/50">
+                                  <td className="px-4 py-2 font-medium text-zinc-300 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full" style={{ background: p.color }}></div>
+                                    {p.name}
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      className="w-full bg-zinc-950/50 border border-zinc-700 rounded p-1 text-center text-xs text-zinc-300 focus:border-blue-500 outline-none"
+                                      value={feePercent}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        setSimulationOverrides(prev => ({
+                                          ...prev,
+                                          [p.id]: { ...prev[p.id], fee: isNaN(val) ? 0 : val, fixed: feeFixed }
+                                        }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="relative">
+                                      <span className="absolute left-1.5 top-1 text-[10px] text-zinc-500">R$</span>
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        className="w-full bg-zinc-950/50 border border-zinc-700 rounded p-1 pl-4 text-center text-xs text-zinc-300 focus:border-blue-500 outline-none"
+                                        value={feeFixed}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value);
+                                          setSimulationOverrides(prev => ({
+                                            ...prev,
+                                            [p.id]: { ...prev[p.id], fee: feePercent, fixed: isNaN(val) ? 0 : val }
+                                          }));
+                                        }}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2 text-right text-zinc-300">R$ {liquid.toFixed(2)}</td>
+                                  <td className={`px-4 py-2 text-right font-bold ${profit > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                    R$ {profit.toFixed(2)}
+                                    <span className="block text-[10px] opacity-70">{margin.toFixed(0)}%</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {platforms.length === 0 && (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-4 text-center text-zinc-500 italic">
+                                  Nenhuma plataforma cadastrada. Rode o script Master para configurar.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* NAVIGATION BUTTONS */}
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-zinc-800/50">
+                {currentStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(prev => prev - 1)}
+                    className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  >
+                    Voltar
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                {currentStep < 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentStep === 1 && !formData.name) {
+                        alert("Digite o nome do produto!");
+                        return;
+                      }
+                      setCurrentStep(prev => prev + 1);
+                    }}
+                    className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition-colors flex items-center gap-2"
+                  >
+                    Próximo <ChevronRightIcon className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleSaveProduct()}
+                    className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-900/20 active:scale-95 transition-all"
+                  >
+                    Salvar Produto
+                  </button>
+                )}
               </div>
-            </form>
+
+              {/* QUICK SUPPLIER MODAL OVERLAY */}
+              {showQuickSupplier && (
+                <div className="mt-4 pt-4 border-t border-zinc-800 animate-in fade-in slide-in-from-bottom-2">
+                  <h4 className="font-bold text-zinc-100 mb-3">Novo Fornecedor Rápido</h4>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Nome da Empresa"
+                      value={quickSupplierName}
+                      onChange={(e) => setQuickSupplierName(e.target.value)}
+                      className="w-full p-2 border border-border rounded text-sm bg-zinc-900 text-zinc-100 outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowQuickSupplier(false)}
+                        className="flex-1 py-2 bg-zinc-800 text-zinc-300 rounded text-xs font-bold"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (quickSupplierName.trim()) {
+                            const newSupplier = await db.addSupplier({ name: quickSupplierName.trim() });
+                            if (newSupplier) {
+                              await loadData();
+                              setFormData({ ...formData, supplier_id: newSupplier.id });
+                              setQuickSupplierName('');
+                              setShowQuickSupplier(false);
+                            }
+                          }
+                        }}
+                        className="flex-1 py-2 bg-blue-600 text-white rounded text-xs font-bold"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
           </div>
         </div>
       )}
@@ -817,7 +840,7 @@ export const Inventory: React.FC = () => {
                 </div>
               </div>
 
-              {/* Variations Preview - Split Columns Vertical Flow (Moved Here) */}
+              {/* Variations Preview - Split Columns Vertical Flow */}
               {prod.variations && prod.variations.length > 0 && (
                 <div className="mb-4 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800">
                   <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-3 border-b border-zinc-800/50 pb-1">Por Variação</div>
