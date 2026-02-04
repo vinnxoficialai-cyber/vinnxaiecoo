@@ -18,7 +18,17 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const [currentView, setCurrentView] = useState<View>('dashboard');
+  // Read initial view from localStorage or default to 'dashboard'
+  const [currentView, setCurrentView] = useState<View>(() => {
+    return (localStorage.getItem('currentView') as View) || 'dashboard';
+  });
+
+  // Persist view changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      localStorage.setItem('currentView', currentView);
+    }
+  }, [currentView, isAuthenticated]);
   const [sales, setSales] = useState<SaleWithDetails[]>([]);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);

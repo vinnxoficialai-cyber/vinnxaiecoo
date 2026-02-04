@@ -65,19 +65,12 @@ export const Suppliers: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      // Update logic (Not implemented in mock db, simulating replace)
-      // Ideally db.updateSupplier(editingId, formData);
-      // For this mock, we can remove and add, or just accept that addSupplier pushes new
-      // Let's implement a simple update in local state for UI responsiveness
-      const updated = { ...formData, id: editingId } as Supplier;
-      const newSuppliers = suppliers.map(s => s.id === editingId ? updated : s);
-      setSuppliers(newSuppliers);
-      // Persist would go here in real app. Mock DB doesn't have update.
+      await db.updateSupplier({ ...formData, id: editingId } as Supplier);
     } else {
       await db.addSupplier(formData as Omit<Supplier, 'id'>);
-      const updated = await db.getSuppliers();
-      setSuppliers(updated);
     }
+    const updated = await db.getSuppliers();
+    setSuppliers(updated);
     setIsModalOpen(false);
   };
 
