@@ -140,6 +140,26 @@ export const db = {
     return data;
   },
 
+  addPlatform: async (platform: Omit<Platform, 'id'>): Promise<Platform | null> => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      console.error('Usuário não autenticado');
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from('platforms')
+      .insert({ ...platform, user_id: userId })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao adicionar plataforma:', error);
+      return null;
+    }
+    return data;
+  },
+
   // ============ UPDATE OPERATIONS ============
 
   updateProductStock: async (productId: string, newQuantity: number): Promise<void> => {

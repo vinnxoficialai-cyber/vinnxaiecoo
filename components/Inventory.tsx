@@ -36,6 +36,10 @@ export const Inventory: React.FC = () => {
     image_url: ''
   });
 
+  // 3. Quick Add Supplier
+  const [showQuickSupplier, setShowQuickSupplier] = useState(false);
+  const [quickSupplierName, setQuickSupplierName] = useState('');
+
   // Load Data
   const loadData = async () => {
     const [productsData, suppliersData] = await Promise.all([
@@ -358,15 +362,66 @@ export const Inventory: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 mb-1">Fornecedor</label>
-                  <select
-                    required
-                    className="w-full p-3 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
-                    value={formData.supplier_id}
-                    onChange={e => setFormData({ ...formData, supplier_id: e.target.value })}
-                  >
-                    <option value="">Selecione...</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      className="flex-1 p-3 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                      value={formData.supplier_id}
+                      onChange={e => setFormData({ ...formData, supplier_id: e.target.value })}
+                    >
+                      <option value="">Selecione...</option>
+                      {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickSupplier(!showQuickSupplier)}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                      title="Adicionar fornecedor"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Quick Add Supplier Form */}
+                  {showQuickSupplier && (
+                    <div className="mt-2 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Nome do fornecedor"
+                        value={quickSupplierName}
+                        onChange={(e) => setQuickSupplierName(e.target.value)}
+                        className="w-full p-2 border border-border rounded-lg text-sm bg-zinc-900 text-zinc-100 focus:border-blue-500 outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowQuickSupplier(false);
+                            setQuickSupplierName('');
+                          }}
+                          className="flex-1 py-2 text-xs bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (quickSupplierName.trim()) {
+                              const newSupplier = await db.addSupplier({ name: quickSupplierName.trim() });
+                              if (newSupplier) {
+                                await loadData();
+                                setFormData({ ...formData, supplier_id: newSupplier.id });
+                                setQuickSupplierName('');
+                                setShowQuickSupplier(false);
+                              }
+                            }
+                          }}
+                          className="flex-1 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500 font-bold"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 mb-1">Estoque Mínimo</label>
