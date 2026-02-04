@@ -57,18 +57,56 @@ const Dashboard: React.FC<DashboardProps> = ({ sales }) => {
     loadData();
   }, []);
 
-  // --- STATS CALCULATION ---
+  // --- STATS CALCULATION (MoM Comparison) ---
   const stats = useMemo(() => {
-    const totalProfit = sales.reduce((acc, curr) => acc + curr.profit_final, 0);
-    const totalRevenue = sales.reduce((acc, curr) => acc + curr.value_received, 0);
-    const totalExpenses = sales.reduce((acc, curr) => {
-      // (Product Cost + Box + Bag + Label + Other)
-      const costs = curr.cost_product_snapshot + (curr.cost_box || 0) + (curr.cost_bag || 0) + (curr.cost_label || 0) + (curr.cost_other || 0);
-      return acc + costs;
-    }, 0);
-    const count = sales.length;
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-    return { totalProfit, totalRevenue, totalExpenses, count };
+    // Previous month computation correctly handling January (0) -> December (11)
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonth = prevMonthDate.getMonth();
+    const prevYear = prevMonthDate.getFullYear();
+
+    // Helper to sum fields
+    const calcTotals = (saleList: SaleWithDetails[]) => {
+      const profit = saleList.reduce((acc, curr) => acc + curr.profit_final, 0);
+      const revenue = saleList.reduce((acc, curr) => acc + curr.value_received, 0);
+      const expenses = saleList.reduce((acc, curr) => {
+        return acc + (curr.cost_product_snapshot + (curr.cost_box || 0) + (curr.cost_bag || 0) + (curr.cost_label || 0) + (curr.cost_other || 0));
+      }, 0);
+      const count = saleList.length;
+      return { profit, revenue, expenses, count };
+    };
+
+    const currentSales = sales.filter(s => {
+      const d = new Date(s.date_sale);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const prevSales = sales.filter(s => {
+      const d = new Date(s.date_sale);
+      return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+    });
+
+    const currentStats = calcTotals(currentSales);
+    const prevStats = calcTotals(prevSales);
+
+    // Calculate Trend Percentages
+    const calcTrend = (curr: number, prev: number) => {
+      if (prev === 0) return curr > 0 ? 100 : 0; // If prev was 0 and curr > 0, treat as 100% growth (or just 0 if both 0)
+      return ((curr - prev) / prev) * 100;
+    };
+
+    return {
+      ...currentStats, // Expose current month totals as main stats
+      trends: {
+        profit: calcTrend(currentStats.profit, prevStats.profit),
+        revenue: calcTrend(currentStats.revenue, prevStats.revenue),
+        expenses: calcTrend(currentStats.expenses, prevStats.expenses),
+        count: calcTrend(currentStats.count, prevStats.count)
+      }
+    };
   }, [sales]);
 
   const lowStockProducts = useMemo(() => {
@@ -154,35 +192,37 @@ const Dashboard: React.FC<DashboardProps> = ({ sales }) => {
       {/* 1. STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="Receita Líquida"
-          value={`R$ ${stats.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          trend={8}
-          trendDirection="up"
+          label="Receita (Este Mês)"
+          value={`R$ ${stats.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          trend={Number(stats.trends.revenue.toFixed(1))}
+          trendDirection={stats.trends.revenue >= 0 ? 'up' : 'down'}
           Icon={DollarSignIcon}
           color="text-emerald-500"
           bgIconColor="bg-emerald-500/10"
         />
         <StatCard
-          label="Lucro Total"
-          value={`R$ ${stats.totalProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          trend={12}
-          trendDirection="up"
+          label="Lucro (Este Mês)"
+          value={`R$ ${stats.profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          trend={Number(stats.trends.profit.toFixed(1))}
+          trendDirection={stats.trends.profit >= 0 ? 'up' : 'down'}
           Icon={TrendingUpIcon}
           color="text-blue-500"
           bgIconColor="bg-blue-500/10"
         />
         <StatCard
-          label="Custos Totais"
-          value={`R$ ${stats.totalExpenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          trend={2}
-          trendDirection="down"
+          label="Custos (Este Mês)"
+          value={`R$ ${stats.expenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          trend={Number(stats.trends.expenses.toFixed(1))}
+          trendDirection={stats.trends.expenses <= 0 ? 'up' : 'down'} // Expenses going down is 'good' (up arrow green?) No, visually red arrow down is better for expenses context? Stick to generic logic: down arrow = value decreased.
           Icon={TrendingDownIcon}
           color="text-red-500"
           bgIconColor="bg-red-500/10"
         />
         <StatCard
-          label="Vendas Realizadas"
+          label="Vendas (Este Mês)"
           value={stats.count.toString()}
+          trend={Number(stats.trends.count.toFixed(0))}
+          trendDirection={stats.trends.count >= 0 ? 'up' : 'down'}
           Icon={CheckCircleIcon}
           color="text-purple-500"
           bgIconColor="bg-purple-500/10"
