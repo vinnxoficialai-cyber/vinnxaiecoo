@@ -81,6 +81,14 @@ export const Suppliers: React.FC = () => {
     setIsModalOpen(false);
   };
 
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Tem certeza que deseja excluir este fornecedor?')) {
+      await db.deleteSupplier(id);
+      const updated = await db.getSuppliers();
+      setSuppliers(updated);
+    }
+  };
+
   const handleWhatsApp = (phone?: string) => {
     if (!phone) return;
     const cleanPhone = phone.replace(/\D/g, '');
@@ -267,13 +275,22 @@ export const Suppliers: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => handleOpenModal(sup)}
-                className="p-2 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
-                title="Editar"
-              >
-                <PencilIcon className="w-4 h-4" />
-              </button>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => handleOpenModal(sup)}
+                  className="p-2 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
+                  title="Editar"
+                >
+                  <PencilIcon className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(sup.id)}
+                  className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+                  title="Excluir"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Card Body - Info */}

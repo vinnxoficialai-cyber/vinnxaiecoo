@@ -184,6 +184,28 @@ export const db = {
     }
   },
 
+  updateSupplier: async (supplier: Supplier): Promise<void> => {
+    const { error } = await supabase
+      .from('suppliers')
+      .update(supplier)
+      .eq('id', supplier.id);
+
+    if (error) {
+      console.error('Erro ao atualizar fornecedor:', error);
+    }
+  },
+
+  deleteSupplier: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from('suppliers')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Erro ao deletar fornecedor:', error);
+    }
+  },
+
   deleteProduct: async (productId: string): Promise<void> => {
     const { error } = await supabase
       .from('products')

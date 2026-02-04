@@ -1,61 +1,67 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>VinnxAI Eco - Gestão de Vendas</title>
-    
-    <!-- PWA Meta Tags -->
-    <meta name="description" content="Sistema de gestão de vendas e estoque para e-commerce" />
-    <meta name="theme-color" content="#2563eb" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="VinnxAI" />
-    
-    <!-- PWA Icons -->
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/images/products/android-chrome-192x192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/images/products/android-chrome-512x512.png" />
-    <link rel="apple-touch-icon" href="/images/products/apple-touch-icon.png" />
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              background: '#09090b', // Requested Dark Background
-              card: '#18181b',       // Slightly lighter for cards
-              border: '#27272a',     // Zinc-800
-              primary: '#3b82f6',    // Blue-500
-              secondary: '#a1a1aa',  // Zinc-400
-              accent: '#60a5fa',     // Blue-400
-              success: '#10B981',
-              danger: '#EF4444',
-            }
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>VinnxAI Eco - Gestão de Vendas</title>
+
+  <!-- PWA Meta Tags -->
+  <meta name="description" content="Sistema de gestão de vendas e estoque para e-commerce" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VinnxAI" />
+
+  <!-- PWA Icons -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/android-chrome-192x192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/images/android-chrome-512x512.png" />
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#09090b', // Requested Dark Background
+            card: '#18181b',       // Slightly lighter for cards
+            border: '#27272a',     // Zinc-800
+            primary: '#3b82f6',    // Blue-500
+            secondary: '#a1a1aa',  // Zinc-400
+            accent: '#60a5fa',     // Blue-400
+            success: '#10B981',
+            danger: '#EF4444',
           }
         }
       }
-    </script>
-    <style>
-      /* Mobile optimization */
-      body {
-        -webkit-tap-highlight-color: transparent;
-        background-color: #09090b;
-        color: #f4f4f5; /* Zinc-100 */
-      }
-      .hide-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .hide-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      /* Dark mode inputs */
-      input, select {
-        color-scheme: dark;
-      }
-    </style>
+    }
+  </script>
+  <style>
+    /* Mobile optimization */
+    body {
+      -webkit-tap-highlight-color: transparent;
+      background-color: #09090b;
+      color: #f4f4f5;
+      /* Zinc-100 */
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Dark mode inputs */
+    input,
+    select {
+      color-scheme: dark;
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -67,10 +73,12 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+  <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>
