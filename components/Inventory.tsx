@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { ProductWithDetails, Supplier, Product } from '../types';
 import { PackageIcon, PlusIcon, SearchIcon, PencilIcon, XIcon, CalculatorIcon, MinusIcon } from './ui/Icons';
+import { ImageUpload } from './ImageUpload';
 
 export const Inventory: React.FC = () => {
   const [products, setProducts] = useState<ProductWithDetails[]>([]);
@@ -31,7 +32,8 @@ export const Inventory: React.FC = () => {
     suggested_price: 0,
     supplier_id: '',
     min_stock_level: 5,
-    stock_quantity: 0
+    stock_quantity: 0,
+    image_url: ''
   });
 
   // Load Data
@@ -72,7 +74,8 @@ export const Inventory: React.FC = () => {
         suggested_price: product.suggested_price || 0,
         supplier_id: product.supplier_id || '',
         min_stock_level: product.min_stock_level,
-        stock_quantity: product.stock_quantity
+        stock_quantity: product.stock_quantity,
+        image_url: product.image_url || ''
       });
     } else {
       setEditingId(null);
@@ -85,7 +88,8 @@ export const Inventory: React.FC = () => {
         suggested_price: 0,
         supplier_id: '',
         min_stock_level: 5,
-        stock_quantity: 0
+        stock_quantity: 0,
+        image_url: ''
       });
     }
     setIsFormOpen(true);
@@ -107,7 +111,8 @@ export const Inventory: React.FC = () => {
         suggested_price: Number(formData.suggested_price),
         stock_quantity: formData.stock_quantity!,
         min_stock_level: Number(formData.min_stock_level),
-        supplier_id: formData.supplier_id
+        supplier_id: formData.supplier_id,
+        image_url: formData.image_url
       };
       await db.updateProduct(productToUpdate);
     } else {
@@ -121,7 +126,8 @@ export const Inventory: React.FC = () => {
         suggested_price: Number(formData.suggested_price),
         stock_quantity: Number(formData.stock_quantity),
         min_stock_level: Number(formData.min_stock_level),
-        supplier_id: formData.supplier_id
+        supplier_id: formData.supplier_id,
+        image_url: formData.image_url
       });
     }
 
@@ -258,6 +264,13 @@ export const Inventory: React.FC = () => {
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
+
+              {/* Image Upload */}
+              <ImageUpload
+                currentImageUrl={formData.image_url}
+                productId={editingId || 'new'}
+                onImageUploaded={(url) => setFormData({ ...formData, image_url: url })}
+              />
 
               {/* Financial Block */}
               <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-4">
